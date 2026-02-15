@@ -8,13 +8,16 @@ with open("main.py") as f:
 
 
 class Visitor(ast.NodeVisitor):
-    '''Covers unused variables & unused imports'''
+    '''Covers unused variables, unused imports & uncalled functions'''
     def __init__(self):
         self.assignment_list = []
         self.load_list = []
         self.import_list = []
         self.snake_case = [True]
-
+        self.func_assignments = []
+        self.func_calls = []
+        self.func_params = []
+        self.used_params = []
 
     def visit_Assign(self, node):
         for targets in node.targets:
@@ -25,18 +28,17 @@ class Visitor(ast.NodeVisitor):
                     self.assignment_list.append((targets.id, targets.lineno))
         self.generic_visit(node)
 
-    def visit_Load(self, node):
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                self.load_list.append(node.id)
-
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            self.load_list.append(node.id)
+        self.generic_visit(node)
 
     def visit_Import(self, node):
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if ((str(alias.name)) not in self.import_list):
-                        self.import_list.append(str(alias.name))
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if ((str(alias.name)) not in self.import_list):
+                    self.import_list.append(str(alias.name))
+        self.generic_visit(node)
 
     def find_unused_variables(self):
         unused_var_list = []
@@ -70,6 +72,36 @@ class Visitor(ast.NodeVisitor):
                 if _import not in used_import_list:
                     print(f"Unused import {_import}")
 
+    def visit_FunctionDef(self, node):
+        self.func_assignments.append((node.name,node.lineno))
+        self.func_params = []
+        for arg in node.args.args:
+            self.func_params.append((arg.arg,arg.lineno))
+        self.used_params = []
+        for node in node.body:
+            add = True
+            text = ast.dump(node)
+            for arg in self.func_params:
+                comparision_string = "id=" + f"'{arg[0]}'"
+                if comparision_string in text and arg[0] not in self.used_params:
+                    self.used_params.append(arg[0])
+        self.generic_visit(node)
+
+    def unused_function_params_summary(self):
+        for func_param in self.func_params:
+            if func_param[0] not in self.used_params:
+                print(f"Unused function paramter {func_param[0]} declared at line {func_param[1]}")
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name):
+            self.func_calls.append(node.func.id)
+        self.generic_visit(node)
+
+    def uncalled_function_summary(self):
+        for func in self.func_assignments:
+            if func[0] not in self.func_calls:
+                print(f"Uncalled function {func[0]} at line {func[1]}")
+
 def snake_case_checker(snake_case):
     if not snake_case[0]:
         print("Suggestion | PEP 8 Suggests using snake_case as the standard naming convention for most identifiers")
@@ -93,9 +125,11 @@ def main():
     snake_case_checker(visit.snake_case)
     #line length checker
     line_len_checker()
-
-    VisitorMemory().visit(tree)
-
+    #Uncalled functions check
+    visit.uncalled_function_summary()
+    #Unused function paramters check
+    visit.unused_function_params_summary()
 
 if __name__ == "__main__":
     main()
+
