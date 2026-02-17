@@ -5,10 +5,19 @@
 '''
 import ast
 import pprint as pp
+import sys
 line_suggestion_limit = 80
 
-with open("main.py") as f:
-    tree = ast.parse(f.read())
+filename = sys.argv[1] if len(sys.argv) > 1 else None
+if filename is None:
+    print("No filename provided")
+    sys.exit(1)
+try:
+    with open("main.py") as f:
+        tree = ast.parse(f.read())
+except FileNotFoundError:
+    print("File Error")
+    sys.exit(1)
 
 class Visitor(ast.NodeVisitor):
     '''Covers unused variables, unused imports & uncalled functions'''
